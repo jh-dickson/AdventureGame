@@ -8,13 +8,13 @@
 #include <pthread.h> //<- technically speaking ncurses isn't really threadsafe but it works haha... see: https://stackoverflow.com/questions/29910562/why-has-no-one-written-a-threadsafe-branch-of-the-ncurses-library
 
 /*GLOBAL VARIABLES*/
-char *option[];
+char *option[]; //<-used when loading the settings file, as with value
 char *value[];
-char *inventory[3][2] = {{"Health", "5"}, {"Swords", "0"}, {"Stars", "0"}};
-int recentCh, itemHere;
-/*itemHere is a surprisingly complex integer type!
-    recentCh: KEY_BACKSPACE - itemHere: 1 = enemy present, 0 = nothing here
-    recentCh: 10 - itemHere: 1 = sword, 2 = star, 0 = nothing here*/
+char *inventoryItems[4] = {"Health", "Hunger", "Swords", "Stars"}; //<- lets stats keep track of different character traits
+int inventoryValues[4] = {5, 0, 0, 0};
+int recentInput; 
+char charUnderCursor;
+int movements;
 
 /*pthread definitions - this simplifies the locks and unlocks, see above stackoverflow link*/
 pthread_mutex_t MUTEX;
@@ -39,80 +39,52 @@ int can_move(int diffX, int diffY, char worldItems[4])
 {
     //diffX is the change in X, same idea with diffY
     //worldItems array is the set of items 0:up 1:down 2:left 3:right from the moving object
+    int i;
     switch (diffX)
     {
-    case 1:
-        switch (worldItems[3])
-        {
-        case 'T':
-            return FALSE;
+        case 1:
+            i = 3;
             break;
-        case 'W':
-            return TRUE;
-            break;
-        case ' ':
-            return TRUE;
+        case -1:
+            i = 2;
             break;
         default:
-            return TRUE;
             break;
-        }
-        break;
-    case -1:
-        switch (worldItems[2])
-        {
-        case 'T':
-            return FALSE;
-            break;
-        case 'W':
-            return TRUE;
-            break;
-        case ' ':
-            return TRUE;
-            break;
-        default:
-            return TRUE;
-            break;
-        }
-        break;
     }
     switch (diffY)
     {
-    case 1:
-        switch (worldItems[1])
-        {
-        case 'T':
-            return FALSE;
+        case 1:
+            i = 1;
             break;
-        case 'W':
-            return TRUE;
-            break;
-        case ' ':
-            return TRUE;
+        case -1:
+            i = 0;
             break;
         default:
-            return TRUE;
             break;
-        }
-        break;
-    case -1:
-        switch (worldItems[0])
-        {
-        case 'T':
-            return FALSE;
-            break;
-        case 'W':
-            return TRUE;
-            break;
-        case ' ':
-            return TRUE;
-            break;
-        default:
-            return TRUE;
-            break;
-        }
-        break;
     }
+
+    switch (worldItems[i])
+    {
+        case 'T':
+            return FALSE;
+            break;
+        case 'W':
+            //one liner for nanosleep - water should slow you down a bit
+            nanosleep((const struct timespec[]){{0, 500000000L}}, NULL);
+            return TRUE;
+            break;
+        case ' ':
+            return TRUE;
+            break;
+        case 'B':
+            return TRUE;
+            break;
+        default:
+            return TRUE;
+            break;
+    }
+
+
 
 }
 
@@ -168,44 +140,52 @@ void *stats_handler(void *p)
 
     for(;;)
     {
-        if(recentCh == 0)
+        if(recentInput == 0)
         {
-            //the hard loop was causing my laptop battery to die, so we'll only refresh every second
-            //also "fixes" a race condition but we'll ignore that...
-            sleep(1);
+            //run the hunger stats: every 5 moves, the player hunger increases
+            if (movements % 5 == 0)
+            {
+                inventoryValues[1]+=1;
+                LOCK;
+                movements = 0;
+                UNLOCK;
+            }
+            
+
         }
         else
         {    
-            switch (recentCh)
+            switch (recentInput)
             {
             case KEY_BACKSPACE:
-                if(itemHere == 1)
+                if(charUnderCursor == 'B')
                 {
+                    inventoryValues[1]++;
                     mvwprintw(statsWindow, 1, 1,"Picked up sword");
                 }
                 else
                 {
                     mvwprintw(statsWindow, 1, 1,"No item here!");
                 }
-                wrefresh(statsWindow);
                 LOCK;
-                recentCh = 0;
-                itemHere = 0;
+                recentInput = 0;
+                charUnderCursor = '\0';
                 UNLOCK;
                 break;
             case 10:
                 mvwprintw(statsWindow, 2, 1,"No enemies here!");
-                wrefresh(statsWindow);
+
                 LOCK;
-                recentCh = 0;
+                recentInput = 0;
                 UNLOCK;
                 break;
             }
-        }
-        //get inventory and print
-        for (int i = 0; i < 3; i++)
-        {
-            mvwprintw(statsWindow, (i+1), (COLS*0.5), "%s: %s", inventory[i-1][2], inventory[i-1][3]);
+            //get inventory and print
+            for (int i = 0; i < 4; i++)
+            {
+                mvwprintw(statsWindow, (i+1), (COLS*0.5), "%s: %d", inventoryItems[i], inventoryValues[i]);
+            }
+            wrefresh(statsWindow);
         }
     }
 }
@@ -227,46 +207,50 @@ void *game_handler(void *p)
     init_pair(1, COLOR_YELLOW, COLOR_GREEN); //<- grass (green background and yellow characters)
     init_pair(2, COLOR_BLUE, COLOR_CYAN); //<- water
     init_pair(3, COLOR_BLACK, COLOR_GREEN); //<- trees
+    init_pair(4, COLOR_WHITE, COLOR_RED); //<- boxes
 
     for (int i = 1; i < (LINES*0.8)-1; i++)
     {
         for (int j = 1; j < COLS-1; j++)
         {
             srand(seed);
-            int nextCharType = rand() % 100;
-            if (nextCharType < 87)
-            {
-                charToAdd = " ";
-                wattron(gameWindow, COLOR_PAIR(1)); //<- this has to be done inside the if statement as the charTypes have different colours
-                mvwprintw(gameWindow, i, j, charToAdd);
-                wattroff(gameWindow, COLOR_PAIR(1));
-            }
-            else if (nextCharType > 87 && nextCharType < 98)
-            {
-                charToAdd = "W";
-                wattron(gameWindow, COLOR_PAIR(2)); //<- this has to be done inside the if statement as the charTypes have different colours
-                mvwprintw(gameWindow, i, j, charToAdd);
-                wattroff(gameWindow, COLOR_PAIR(2));
-            }
-            else
+            int nextCharType = rand() % 1000;
+            if (nextCharType <= 86)
             {
                 charToAdd = "T";
                 wattron(gameWindow, COLOR_PAIR(3)); //<- this has to be done inside the if statement as the charTypes have different colours
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(3));
             }
+            else if (nextCharType > 86 && nextCharType <= 120)
+            {
+                charToAdd = "W";
+                wattron(gameWindow, COLOR_PAIR(2)); //<- this has to be done inside the if statement as the charTypes have different colours
+                mvwprintw(gameWindow, i, j, charToAdd);
+                wattroff(gameWindow, COLOR_PAIR(2));
+            }
+            else if (nextCharType > 120 && nextCharType <= 121)
+            {
+                charToAdd = "B";
+                wattron(gameWindow, COLOR_PAIR(4)); //<- this has to be done inside the if statement as the charTypes have different colours
+                mvwprintw(gameWindow, i, j, charToAdd);
+                wattroff(gameWindow, COLOR_PAIR(4));
+            }
+            else
+            {
+                charToAdd = " ";
+                wattron(gameWindow, COLOR_PAIR(1)); //<- this has to be done inside the if statement as the charTypes have different colours
+                mvwprintw(gameWindow, i, j, charToAdd);
+                wattroff(gameWindow, COLOR_PAIR(1));
+            }
             seed++;
         }
     }
-    
 
     //set cursor to the centre of the gameWindow
     int cursorX = COLS/2;
     int cursorY = LINES*0.4;
-    chtype *reprintChar;
-    winchstr(gameWindow, reprintChar);//<-allows us to print the character back after being over it.
     wmove(gameWindow, cursorY, cursorX);
-    wprintw(gameWindow, "X");
     wrefresh(gameWindow);
     
     //take user input and handle accordingly
@@ -289,56 +273,66 @@ void *game_handler(void *p)
             worldItems[3] = mvwinch(gameWindow, cursorY, cursorX + 1);
             wmove(gameWindow, cursorY, cursorX);
             
-            //this also handles input for the stats screen using global variable recentCh
+            //this also handles input for the stats screen using global variable recentInput
             switch(input)
             {
                 case KEY_UP: 
                     //character movements are a weird routine which should really be in a function but i couldn't work that out in time
                     if (can_move(0,-1, worldItems) == TRUE)
                     {
-                        mvwprintw(gameWindow, cursorY, cursorX, reprintChar);
                         cursorY--;
-                        winchstr(gameWindow, reprintChar);
-                        mvwprintw(gameWindow, cursorY, cursorX, "X");
+                        wmove(gameWindow, cursorY, cursorX);
+                        //let stats know the player moved so we can increase hunger
+                        LOCK;
+                        movements++;
+                        UNLOCK;
                     }
                     break;
                 case KEY_DOWN:
                     if (can_move(0, 1, worldItems) == TRUE)
                     {
-                        mvwprintw(gameWindow, cursorY, cursorX, reprintChar);
                         cursorY++;
-                        winchstr(gameWindow, reprintChar);
-                        mvwprintw(gameWindow, cursorY, cursorX, "X");
+                        wmove(gameWindow, cursorY, cursorX);
+                        //let stats know the player moved so we can increase hunger
+                        LOCK;
+                        movements++;
+                        UNLOCK;
                     }
                     break;
                 case KEY_LEFT:
                     if (can_move(-1, 0, worldItems) == TRUE)
                     {
-                        mvwprintw(gameWindow, cursorY, cursorX, reprintChar);
                         cursorX--;
-                        winchstr(gameWindow, reprintChar);
-                        mvwprintw(gameWindow, cursorY, cursorX, "X");
+                        wmove(gameWindow, cursorY, cursorX);
+                        //let stats know the player moved so we can increase hunger
+                        LOCK;
+                        movements++;
+                        UNLOCK;
                     }
                     break;
                 case KEY_RIGHT:
                     if (can_move(1, 0, worldItems) == TRUE)
                     {
-                        mvwprintw(gameWindow, cursorY, cursorX, reprintChar);
                         cursorX++;
-                        winchstr(gameWindow, reprintChar);
-                        mvwprintw(gameWindow, cursorY, cursorX, "X");
+                        wmove(gameWindow, cursorY, cursorX);
+                        //let stats know the player moved so we can increase hunger
+                        LOCK;
+                        movements++;
+                        UNLOCK;
                     }
                     break;
                 case KEY_BACKSPACE:
                     //offload to stats handler
                     LOCK;
-                    recentCh = KEY_BACKSPACE;
+                    recentInput = KEY_BACKSPACE;
+                    charUnderCursor = winch(gameWindow);
                     UNLOCK;
                     break;
                 case 10:
                     //offload to stats handler
                     LOCK;
-                    recentCh = 10;
+                    recentInput = 10;
+                    charUnderCursor = winch(gameWindow);
                     UNLOCK;
                     break;
                 
