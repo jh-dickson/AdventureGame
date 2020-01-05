@@ -5,6 +5,11 @@
 #include <time.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/shm.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <pthread.h> //<- technically speaking ncurses isn't really threadsafe but it works haha... see: https://stackoverflow.com/questions/29910562/why-has-no-one-written-a-threadsafe-branch-of-the-ncurses-library
 
 /*GLOBAL VARIABLES*/
@@ -15,6 +20,7 @@ int inventoryValues[4] = {5, 0, 0, 0};
 int recentInput; 
 char charUnderCursor;
 int movements;
+int difficulty;
 
 /*pthread definitions - this simplifies the locks and unlocks, see above stackoverflow link*/
 pthread_mutex_t MUTEX;
@@ -30,15 +36,44 @@ WINDOW *create_newwin(int height, int width, int starty, int startx) {
     return local_win;
 }
 
-int comp_move()
+//shared memory reader for IPC with fight process - see https://www.geeksforgeeks.org/posix-shared-memory-api/
+int mmap_reader_fight()
 {
+    //this is mostly documented in the fight.c comments, only real difference is we're reading not writing
+    const int memSize = 16; 
+    const char* memName = "fight"; 
+    int memFileDescriptor; 
+    void* memPointer; 
+  
+    memFileDescriptor = shm_open(memName, O_RDONLY, 0666); 
+  
+    memPointer = mmap(0, memSize, PROT_READ, MAP_SHARED, memFileDescriptor, 0); 
+    int result = memPointer; 
 
+    //we've got the result of the fight process so go ahead and kill it
+    shm_unlink(memName);
+    return 0; 
 }
 
-int can_move(int diffX, int diffY, char worldItems[4])
+int can_move(int diffX, int diffY, char worldItems[5])
 {
+    //check if we're on the enemy, if so launch the fight window
+    if (worldItems[4] == 'X')
+    {
+        /*the result is defined as 0 - scorpion, lose 2hp.
+                                   1 - win against bear, gain 3 stars
+                                   2 - lose against bear, end of game
+                                   3 - spider kill, gain 1 star
+                                   4 - spider bite, lose 1hp
+                                   5 - win against wolf, gain 2 stars
+                                   6 - lose against wolf, lose 4hp
+                                   */
+        int result = system("gnome-terminal -x sh -c \"./fight\"");
+        shm_reader_fight();
+    }
+    
     //diffX is the change in X, same idea with diffY
-    //worldItems array is the set of items 0:up 1:down 2:left 3:right from the moving object
+    //worldItems array is the set of items 0:up 1:down 2:left 3:right 4:underneath the moving object
     int i;
     switch (diffX)
     {
@@ -73,12 +108,7 @@ int can_move(int diffX, int diffY, char worldItems[4])
             nanosleep((const struct timespec[]){{0, 500000000L}}, NULL);
             return TRUE;
             break;
-        case ' ':
-            return TRUE;
-            break;
-        case 'B':
-            return TRUE;
-            break;
+        //all other types can be moved onto without modification
         default:
             return TRUE;
             break;
@@ -143,11 +173,11 @@ void *stats_handler(void *p)
         if(recentInput == 0)
         {
             //run the hunger stats: every 5 moves, the player hunger increases
-            if (movements % 5 == 0)
+            if (movements >= 5)
             {
-                inventoryValues[1]+=1;
+                inventoryValues[1]++;
                 LOCK;
-                movements = 0;
+                movements =- 5;
                 UNLOCK;
             }
             
@@ -160,7 +190,7 @@ void *stats_handler(void *p)
             case KEY_BACKSPACE:
                 if(charUnderCursor == 'B')
                 {
-                    inventoryValues[1]++;
+                    inventoryValues[2]++;
                     mvwprintw(statsWindow, 1, 1,"Picked up sword");
                 }
                 else
@@ -174,7 +204,6 @@ void *stats_handler(void *p)
                 break;
             case 10:
                 mvwprintw(statsWindow, 2, 1,"No enemies here!");
-
                 LOCK;
                 recentInput = 0;
                 UNLOCK;
@@ -185,7 +214,7 @@ void *stats_handler(void *p)
             {
                 mvwprintw(statsWindow, (i+1), (COLS*0.5), "%s: %d", inventoryItems[i], inventoryValues[i]);
             }
-            wrefresh(statsWindow);
+            wrefresh(statsWindow);        
         }
     }
 }
@@ -208,6 +237,7 @@ void *game_handler(void *p)
     init_pair(2, COLOR_BLUE, COLOR_CYAN); //<- water
     init_pair(3, COLOR_BLACK, COLOR_GREEN); //<- trees
     init_pair(4, COLOR_WHITE, COLOR_RED); //<- boxes
+    init_pair(5, COLOR_GREEN, COLOR_GREEN);//<- enemies
 
     for (int i = 1; i < (LINES*0.8)-1; i++)
     {
@@ -225,21 +255,28 @@ void *game_handler(void *p)
             else if (nextCharType > 86 && nextCharType <= 120)
             {
                 charToAdd = "W";
-                wattron(gameWindow, COLOR_PAIR(2)); //<- this has to be done inside the if statement as the charTypes have different colours
+                wattron(gameWindow, COLOR_PAIR(2));
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(2));
             }
             else if (nextCharType > 120 && nextCharType <= 121)
             {
                 charToAdd = "B";
-                wattron(gameWindow, COLOR_PAIR(4)); //<- this has to be done inside the if statement as the charTypes have different colours
+                wattron(gameWindow, COLOR_PAIR(4));
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(4));
+            }
+            else if (nextCharType > 120 && nextCharType <= difficulty)
+            {
+                charToAdd = "X";//X marks the spot
+                wattron(gameWindow, COLOR_PAIR(5));//<-enemies underneath the user are invisible but we can pick them up in code later on
+                mvwprintw(gameWindow, i, j, charToAdd);
+                wattroff(gameWindow, COLOR_PAIR(5));
             }
             else
             {
                 charToAdd = " ";
-                wattron(gameWindow, COLOR_PAIR(1)); //<- this has to be done inside the if statement as the charTypes have different colours
+                wattron(gameWindow, COLOR_PAIR(1));
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(1));
             }
@@ -266,11 +303,12 @@ void *game_handler(void *p)
         else
         {
             //look around the character so we can tell whether to move or not.
-            char worldItems[4];
+            char *worldItems[5];
             worldItems[0] = mvwinch(gameWindow, cursorY - 1, cursorX);
             worldItems[1] = mvwinch(gameWindow, cursorY + 1, cursorX);
             worldItems[2] = mvwinch(gameWindow, cursorY, cursorX - 1);
             worldItems[3] = mvwinch(gameWindow, cursorY, cursorX + 1);
+            worldItems[4] = mvwinch(gameWindow, cursorY, cursorX);
             wmove(gameWindow, cursorY, cursorX);
             
             //this also handles input for the stats screen using global variable recentInput
@@ -282,10 +320,6 @@ void *game_handler(void *p)
                     {
                         cursorY--;
                         wmove(gameWindow, cursorY, cursorX);
-                        //let stats know the player moved so we can increase hunger
-                        LOCK;
-                        movements++;
-                        UNLOCK;
                     }
                     break;
                 case KEY_DOWN:
@@ -293,10 +327,6 @@ void *game_handler(void *p)
                     {
                         cursorY++;
                         wmove(gameWindow, cursorY, cursorX);
-                        //let stats know the player moved so we can increase hunger
-                        LOCK;
-                        movements++;
-                        UNLOCK;
                     }
                     break;
                 case KEY_LEFT:
@@ -304,10 +334,6 @@ void *game_handler(void *p)
                     {
                         cursorX--;
                         wmove(gameWindow, cursorY, cursorX);
-                        //let stats know the player moved so we can increase hunger
-                        LOCK;
-                        movements++;
-                        UNLOCK;
                     }
                     break;
                 case KEY_RIGHT:
@@ -315,10 +341,6 @@ void *game_handler(void *p)
                     {
                         cursorX++;
                         wmove(gameWindow, cursorY, cursorX);
-                        //let stats know the player moved so we can increase hunger
-                        LOCK;
-                        movements++;
-                        UNLOCK;
                     }
                     break;
                 case KEY_BACKSPACE:
@@ -337,10 +359,7 @@ void *game_handler(void *p)
                     break;
                 
             }
-            LOCK;
             wrefresh(gameWindow);
-            UNLOCK;
-        
         }
         
 
