@@ -68,8 +68,8 @@ int can_move(int diffX, int diffY, char worldItems[5])
                                    5 - win against wolf, gain 2 stars
                                    6 - lose against wolf, lose 4hp
                                    */
-        int result = system("gnome-terminal -x sh -c \"./fight\"");
-        shm_reader_fight();
+        //int result = system("gnome-terminal -x sh -c \"./fight\"");
+        //mmap_reader_fight();
     }
     
     //diffX is the change in X, same idea with diffY

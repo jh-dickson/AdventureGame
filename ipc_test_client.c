@@ -15,11 +15,7 @@ int main()
     int memFileDescriptor; 
     void* memPointer; 
     int i;
-RETRY:    memFileDescriptor = shm_open(memName, O_RDONLY, 0666);
-    if(memFileDescriptor = -1)
-    {
-        goto RETRY;
-    }
+    memFileDescriptor = shm_open(memName, O_RDONLY, 0666);
 
     memPointer = mmap(0, memSize, PROT_READ, MAP_SHARED, memFileDescriptor, 0); 
 
