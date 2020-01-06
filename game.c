@@ -54,21 +54,68 @@ int mmap_reader_fight()
     return 0; 
 }
 
-int can_move(int diffX, int diffY, char worldItems[5])
+int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
 {
     //check if we're on the enemy, if so launch the fight window
     if (worldItems[4] == 'X')
     {
-        /*the result is defined as 0 - scorpion, lose 2hp.
-                                   1 - win against bear, gain 3 stars
-                                   2 - lose against bear, end of game
-                                   3 - spider kill, gain 1 star
-                                   4 - spider bite, lose 1hp
-                                   5 - win against wolf, gain 2 stars
-                                   6 - lose against wolf, lose 4hp
-                                   */
-        int result = system("gnome-terminal -x sh -c \"./fight\"");
-        //mmap_reader_fight();
+        werase(gameWindow);
+        srand(time(NULL));
+        int r = rand() % 4;
+
+        switch (r)
+        {
+        case 0:
+            wprintw(gameWindow, "     ___    ___\n");
+            wprintw(gameWindow, "    ( _<    >_ )\n");
+            wprintw(gameWindow, "    //        \\\\\n");
+            wprintw(gameWindow, "    \\\\___..___//\n");
+            wprintw(gameWindow, "     `-(    )-'\n");
+            wprintw(gameWindow, "       _|__|_\n");
+            wprintw(gameWindow, "      /_|__|_\\\n");
+            wprintw(gameWindow, "      /_|__|_\\\n");
+            wprintw(gameWindow, "      /_\\__/_\\\n");
+            wprintw(gameWindow, "       \\ || /  _\n");
+            wprintw(gameWindow, "         ||   ( )\n");
+            wprintw(gameWindow, "         \\\\___//\n");
+            wprintw(gameWindow, "          `---'\n");
+            wprintw(gameWindow, "\n\nYou just stood on a scorpion! - You've lost 2 health points!\n");
+            break;
+        case 1:
+            wprintw(gameWindow, " __         __\n");
+            wprintw(gameWindow, "/  \\.-***-./  \\\n");
+            wprintw(gameWindow, "\\    -   -    /\n");
+            wprintw(gameWindow, " |   o   o   |\n");
+            wprintw(gameWindow, " \\  .-'''-.  /\n");
+            wprintw(gameWindow, "  '-\\__Y__/-'\n");
+            wprintw(gameWindow, "     `---`\n");
+            wprintw(gameWindow, "\n\nYou're being mauled by a bear! - Fight it off!\n");
+            break;
+        case 2:
+            wprintw(gameWindow, " /\\ \\  / /\\\n");
+            wprintw(gameWindow, "//\\\\ .. //\\\\\n");
+            wprintw(gameWindow, "//\\((  ))/\\\\\n");
+            wprintw(gameWindow, "/  < `' >  \\\n");
+            wprintw(gameWindow, "\n\nA spider is about to bite you - kill it!\n");
+            break;
+        case 3:
+            wprintw(gameWindow, "        _\n");
+            wprintw(gameWindow, "       / \\      _-'\n");
+            wprintw(gameWindow, "     _/|  \\-''- _ /\n");
+            wprintw(gameWindow, "__-' { |          \\\\\n");
+            wprintw(gameWindow, "    /             \\\\\n");
+            wprintw(gameWindow, "    /       'o.  |o }\n");
+            wprintw(gameWindow, "    |            \\ ;\n");
+            wprintw(gameWindow, "                  ',\n");
+            wprintw(gameWindow, "       \\_         __\\\n");
+            wprintw(gameWindow, "         ''-_    \\.//\n");
+            wprintw(gameWindow, "           / '-____'\n");
+            wprintw(gameWindow, "          /\n");
+            wprintw(gameWindow, "        _'\n");
+            wprintw(gameWindow, "     _-'\n");
+            wprintw(gameWindow, "\n\nA pack of wolves is hunting you - escape quickly\n");
+            break;
+        }
     }
     
     //diffX is the change in X, same idea with diffY
@@ -313,28 +360,28 @@ void *game_handler(void *p)
             {
                 case KEY_UP: 
                     //character movements are a weird routine which should really be in a function but i couldn't work that out in time
-                    if (can_move(0,-1, (char *)worldItems) == TRUE)
+                    if (can_move(0,-1, (char *)worldItems, gameWindow) == TRUE)
                     {
                         cursorY--;
                         wmove(gameWindow, cursorY, cursorX);
                     }
                     break;
                 case KEY_DOWN:
-                    if (can_move(0, 1, (char *)worldItems) == TRUE)
+                    if (can_move(0, 1, (char *)worldItems, gameWindow) == TRUE)
                     {
                         cursorY++;
                         wmove(gameWindow, cursorY, cursorX);
                     }
                     break;
                 case KEY_LEFT:
-                    if (can_move(-1, 0, (char *)worldItems) == TRUE)
+                    if (can_move(-1, 0, (char *)worldItems, gameWindow) == TRUE)
                     {
                         cursorX--;
                         wmove(gameWindow, cursorY, cursorX);
                     }
                     break;
                 case KEY_RIGHT:
-                    if (can_move(1, 0, (char *)worldItems) == TRUE)
+                    if (can_move(1, 0, (char *)worldItems, gameWindow) == TRUE)
                     {
                         cursorX++;
                         wmove(gameWindow, cursorY, cursorX);
