@@ -2,12 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-char *option[5];
-char *value[5];
+int value[5];
 
 int main()
 {
-    //open the settings file and read each line
     FILE *fp;
     char line[100];
     fp = fopen("settings.txt", "r");
@@ -24,27 +22,26 @@ int main()
     while(fgets(line, 100, fp) != NULL)
     {
         //parse the line - first word is option, second is value
-        int i = 0, k = 0;;
-        char tmpOpt[100];
-        char tmpVal[100];
+        int i = 0;
+        char tmpVal[2];
         while(line[i] != ' ')
         {
-            tmpOpt[k] = line[i];
+            //legacy from when I was parsing option names
             i++;
-            k++;
         }
-        
-        i += 1;
-        k = 0;
+        i += 3;
+        int k = 0;
         while(line[i] != '\n')
         {
            tmpVal[k] = line[i];
             k++;
             i++;
         }
-        printf("TmpVal: %s\n", tmpVal);
+        
+        value[j] = atoi(tmpVal);
         j++;
-
     }
+    printf("value[0]: %d\n", value[0]);
+    printf("value[1]: %d\n", value[1]);
     fclose(fp);
 }

@@ -7,27 +7,26 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+/*GLOBAL VARS*/
+void *memPointer;
+
 //shared memory writer for the game process - see https://www.geeksforgeeks.org/posix-shared-memory-api/
-int mmap_writer_game(int result)
+int mmap_writer_setup()
 {
     const int memSize = 16; //<-plenty of memory for us to use
     const char* memName = "fight";//<- relatively unused, i reckon
 
     int memFileDescriptor;
-    void* memPointer;
 
     //Create the shared memory object with our name and appropriate permissions
     memFileDescriptor = shm_open(memName, O_CREAT | O_RDWR, 0666);
     ftruncate(memFileDescriptor, memSize);
     memPointer = mmap(0, memSize, PROT_WRITE, MAP_SHARED, memFileDescriptor, 0);
-
-    //write the result of the match to the shared memory
-    sprintf(memPointer, "%d", result);
-
 }
 
 int main()
 {
+    mmap_writer_setup(); //<- we need this up before the reader can read from it, otherwise it gets unhappy...
     srand(time(NULL));
     int r = rand() % 4;
 
@@ -84,5 +83,6 @@ int main()
         printf("\n\nA pack of wolves is hunting you - escape quickly\n");
         break;
     }
-
+    //write the result of the match to the shared memory
+    sprintf(memPointer, "[RESULT HERE]");
 }
