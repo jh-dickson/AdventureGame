@@ -36,7 +36,74 @@ WINDOW *create_newwin(int height, int width, int starty, int startx) {
 }
 
 
-int fight_handler(WINDOW *gameWindow, int animal)
+void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
+{
+    char map[LINES][COLS];
+
+    //generate world and print to game window
+    int seed = value[2];
+    const char *charToAdd;
+    start_color();
+    //initialise colour settings for printing - assume the terminal has colour support... it probably does...
+    init_pair(2, COLOR_BLUE, COLOR_CYAN); //<- water
+    init_pair(3, COLOR_BLACK, COLOR_GREEN); //<- trees
+    init_pair(1, COLOR_YELLOW, COLOR_GREEN); //<- grass (green background and yellow characters)
+    init_pair(5, COLOR_GREEN, COLOR_GREEN);//<- enemies - invisible
+    init_pair(4, COLOR_WHITE, COLOR_RED); //<- boxes
+        for (int j = 1; j < COLS-1; j++)
+
+    {
+    for (int i = 1; i < (LINES*0.8)-1; i++)
+            int nextCharType = rand() % 1000;
+        {
+            srand(seed);
+            {
+            if (nextCharType <= 86)
+                charToAdd = "T";
+                mvwprintw(gameWindow, i, j, charToAdd);
+                wattron(gameWindow, COLOR_PAIR(3)); //<- this has to be done inside the if statement as the charTypes have different colours
+                wattroff(gameWindow, COLOR_PAIR(3));
+            }
+            else if (nextCharType > 86 && nextCharType <= 120)
+            {
+                charToAdd = "W";
+                mvwprintw(gameWindow, i, j, charToAdd);
+                wattron(gameWindow, COLOR_PAIR(2));
+                wattroff(gameWindow, COLOR_PAIR(2));
+            }
+            else if (nextCharType > 120 && nextCharType <= 121)
+                charToAdd = "B";
+            {
+                wattron(gameWindow, COLOR_PAIR(4));
+                wattroff(gameWindow, COLOR_PAIR(4));
+                mvwprintw(gameWindow, i, j, charToAdd);
+            else if (nextCharType > 120 && nextCharType <= difficulty)
+            }
+            {
+                charToAdd = "X";//X marks the spot
+                wattron(gameWindow, COLOR_PAIR(3));//<-enemies underneath the user are invisible but we can pick them up in code later on
+                mvwprintw(gameWindow, i, j, charToAdd);
+                wattroff(gameWindow, COLOR_PAIR(3));
+            }
+            else
+            {
+                charToAdd = " ";
+                wattron(gameWindow, COLOR_PAIR(1));
+                mvwprintw(gameWindow, i, j, charToAdd);
+                wattroff(gameWindow, COLOR_PAIR(1));
+            }
+            seed++;
+    }
+        }
+
+    //position cursor and refresh window
+    wmove(gameWindow, cursorY, cursorX);
+    wrefresh(gameWindow);
+    
+    //start keyboard capture
+    nodelay(gameWindow, TRUE);
+    keypad(gameWindow, true);
+}
 {
     switch (animal)
         {
@@ -110,7 +177,7 @@ int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
         int r = rand() % 4;
         fight_handler(gameWindow, r);
     }
-    
+
     //diffX is the change in X, same idea with diffY
     //worldItems array is the set of items 0:up 1:down 2:left 3:right 4:underneath the moving object
     int i;
@@ -263,76 +330,15 @@ void *game_handler(void *p)
     LOCK;
     gameWindow = create_newwin(LINES*0.8, COLS, 0, 0);
     UNLOCK;
-    char map[LINES][COLS];
-
-    //generate world and print to game window
-    const char *charToAdd;
-    int seed = value[2];
-    //initialise colour settings for printing - assume the terminal has colour support... it probably does...
-    start_color();
-    init_pair(1, COLOR_YELLOW, COLOR_GREEN); //<- grass (green background and yellow characters)
-    init_pair(2, COLOR_BLUE, COLOR_CYAN); //<- water
-    init_pair(3, COLOR_BLACK, COLOR_GREEN); //<- trees
-    init_pair(4, COLOR_WHITE, COLOR_RED); //<- boxes
-    init_pair(5, COLOR_GREEN, COLOR_GREEN);//<- enemies - invisible
-
-    for (int i = 1; i < (LINES*0.8)-1; i++)
-    {
-        for (int j = 1; j < COLS-1; j++)
-        {
-            srand(seed);
-            int nextCharType = rand() % 1000;
-            if (nextCharType <= 86)
-            {
-                charToAdd = "T";
-                wattron(gameWindow, COLOR_PAIR(3)); //<- this has to be done inside the if statement as the charTypes have different colours
-                mvwprintw(gameWindow, i, j, charToAdd);
-                wattroff(gameWindow, COLOR_PAIR(3));
-            }
-            else if (nextCharType > 86 && nextCharType <= 120)
-            {
-                charToAdd = "W";
-                wattron(gameWindow, COLOR_PAIR(2));
-                mvwprintw(gameWindow, i, j, charToAdd);
-                wattroff(gameWindow, COLOR_PAIR(2));
-            }
-            else if (nextCharType > 120 && nextCharType <= 121)
-            {
-                charToAdd = "B";
-                wattron(gameWindow, COLOR_PAIR(4));
-                mvwprintw(gameWindow, i, j, charToAdd);
-                wattroff(gameWindow, COLOR_PAIR(4));
-            }
-            else if (nextCharType > 120 && nextCharType <= difficulty)
-            {
-                charToAdd = "X";//X marks the spot
-                wattron(gameWindow, COLOR_PAIR(3));//<-enemies underneath the user are invisible but we can pick them up in code later on
-                mvwprintw(gameWindow, i, j, charToAdd);
-                wattroff(gameWindow, COLOR_PAIR(3));
-            }
-            else
-            {
-                charToAdd = " ";
-                wattron(gameWindow, COLOR_PAIR(1));
-                mvwprintw(gameWindow, i, j, charToAdd);
-                wattroff(gameWindow, COLOR_PAIR(1));
-            }
-            seed++;
-        }
-    }
-
+    
     //set cursor to the centre of the gameWindow
     int cursorX = COLS/2;
     int cursorY = LINES*0.4;
-    wmove(gameWindow, cursorY, cursorX);
-    wrefresh(gameWindow);
+    start_game_window(gameWindow, cursorX, cursorY);
     
-    //take user input and handle accordingly
-    int input;
-    nodelay(gameWindow, TRUE);
-    keypad(gameWindow, true);
     for(;;)
     {
+        int input;
         if((input = wgetch(gameWindow)) == ERR)
         {
             //TODO: yield thread? - not really useful since we're only a few threads here so probably rescheduled immediately
