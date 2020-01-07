@@ -35,35 +35,10 @@ WINDOW *create_newwin(int height, int width, int starty, int startx) {
     return local_win;
 }
 
-//shared memory reader for IPC with fight process - see https://www.geeksforgeeks.org/posix-shared-memory-api/
-int mmap_reader_fight()
+
+int fight_handler(WINDOW *gameWindow, int animal)
 {
-    //this is mostly documented in the fight.c comments, only real difference is we're reading not writing
-    const int memSize = 16; 
-    const char* memName = "fight"; 
-    int memFileDescriptor; 
-    void* memPointer; 
-  
-    memFileDescriptor = shm_open(memName, O_RDONLY, 0666); 
-  
-    memPointer = mmap(0, memSize, PROT_READ, MAP_SHARED, memFileDescriptor, 0); 
-    int result = atoi(memPointer); 
-
-    //we've got the result of the fight process so go ahead and kill it
-    shm_unlink(memName);
-    return 0; 
-}
-
-int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
-{
-    //check if we're on the enemy, if so launch the fight window
-    if (worldItems[4] == 'X')
-    {
-        werase(gameWindow);
-        srand(time(NULL));
-        int r = rand() % 4;
-
-        switch (r)
+    switch (animal)
         {
         case 0:
             wprintw(gameWindow, "     ___    ___\n");
@@ -80,6 +55,9 @@ int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
             wprintw(gameWindow, "         \\\\___//\n");
             wprintw(gameWindow, "          `---'\n");
             wprintw(gameWindow, "\n\nYou just stood on a scorpion! - You've lost 2 health points!\n");
+            
+            
+
             break;
         case 1:
             wprintw(gameWindow, " __         __\n");
@@ -90,6 +68,7 @@ int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
             wprintw(gameWindow, "  '-\\__Y__/-'\n");
             wprintw(gameWindow, "     `---`\n");
             wprintw(gameWindow, "\n\nYou're being mauled by a bear! - Fight it off!\n");
+        
             break;
         case 2:
             wprintw(gameWindow, " /\\ \\  / /\\\n");
@@ -97,6 +76,7 @@ int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
             wprintw(gameWindow, "//\\((  ))/\\\\\n");
             wprintw(gameWindow, "/  < `' >  \\\n");
             wprintw(gameWindow, "\n\nA spider is about to bite you - kill it!\n");
+            
             break;
         case 3:
             wprintw(gameWindow, "        _\n");
@@ -114,8 +94,21 @@ int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
             wprintw(gameWindow, "        _'\n");
             wprintw(gameWindow, "     _-'\n");
             wprintw(gameWindow, "\n\nA pack of wolves is hunting you - escape quickly\n");
+            
             break;
         }
+    return 0; 
+}
+
+int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
+{
+    //check if we're on the enemy, if so launch the fight window
+    if (worldItems[4] == 'X')
+    {
+        werase(gameWindow);
+        srand(time(NULL));
+        int r = rand() % 4;
+        fight_handler(gameWindow, r);
     }
     
     //diffX is the change in X, same idea with diffY
