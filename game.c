@@ -5,12 +5,36 @@
 #include <time.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/shm.h>
-#include <sys/mman.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h> //<- technically speaking ncurses isn't really threadsafe but it works haha... see: https://stackoverflow.com/questions/29910562/why-has-no-one-written-a-threadsafe-branch-of-the-ncurses-library
+
+/*Begin rulebending: #define ROOM window
+I'm classing each window and/or view as a room... :)
+In case you were wondering, here's the list:
+    1) Main menu
+    2) Settings menu
+    3) Readme
+    4) gameWindow
+    5) statsWindow
+    6) Fight view
+
+FWIW here are the usable items:
+    1) Swords, used in fights
+    2) Health, again, used in fights
+    3) Stars, gained in fights and allows the user to end the game
+    4) Hunger, decrements health if you're too hungry
+*/
+
+/*TODO: Implement hunger
+        show stats from game on completion?
+        check sword quantity at each fight stage
+        clean up settings parser code
+        clean up key input handling in fight mode (or room should i say...)
+        yield thread on getch error?
+        investigate shared memory options for inter-terminal comms
+        clean up thread joins...
+        damage from animals
+*/
 
 /*GLOBAL VARIABLES*/
 int value[5]; //<-used when loading the settings file - 0: Level, 1: Difficulty, 2: Seed
@@ -22,6 +46,8 @@ int movements;
 int difficulty = 140;
 
 /*pthread definitions - this simplifies the locks and unlocks, see above stackoverflow link*/
+pthread_t statsThread;
+pthread_t gameThread;
 pthread_mutex_t MUTEX;
 #define LOCK pthread_mutex_lock(&MUTEX)
 #define UNLOCK pthread_mutex_unlock(&MUTEX)
@@ -35,6 +61,13 @@ WINDOW *create_newwin(int height, int width, int starty, int startx) {
     return local_win;
 }
 
+void death_handler()//<-ominous sounding...
+{
+    //not a pretty way of killing the threads, ideally we would do it from within each thread...
+    pthread_cancel(statsThread);
+    pthread_cancel(gameThread);
+
+}
 
 void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
 {
@@ -50,15 +83,16 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
     init_pair(1, COLOR_YELLOW, COLOR_GREEN); //<- grass (green background and yellow characters)
     init_pair(5, COLOR_GREEN, COLOR_GREEN);//<- enemies - invisible
     init_pair(4, COLOR_WHITE, COLOR_RED); //<- boxes
-        for (int j = 1; j < COLS-1; j++)
-
+    
+    for (int j = 1; j < COLS-1; j++)
     {
-    for (int i = 1; i < (LINES*0.8)-1; i++)
-            int nextCharType = rand() % 1000;
+        for (int i = 1; i < (LINES*0.8)-1; i++)
         {
+            int nextCharType = rand() % 1000;
             srand(seed);
-            {
+            
             if (nextCharType <= 86)
+            {
                 charToAdd = "T";
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattron(gameWindow, COLOR_PAIR(3)); //<- this has to be done inside the if statement as the charTypes have different colours
@@ -72,13 +106,13 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
                 wattroff(gameWindow, COLOR_PAIR(2));
             }
             else if (nextCharType > 120 && nextCharType <= 121)
-                charToAdd = "B";
             {
+                charToAdd = "B";
                 wattron(gameWindow, COLOR_PAIR(4));
                 wattroff(gameWindow, COLOR_PAIR(4));
                 mvwprintw(gameWindow, i, j, charToAdd);
-            else if (nextCharType > 120 && nextCharType <= difficulty)
             }
+            else if (nextCharType > 120 && nextCharType <= difficulty)
             {
                 charToAdd = "X";//X marks the spot
                 wattron(gameWindow, COLOR_PAIR(3));//<-enemies underneath the user are invisible but we can pick them up in code later on
@@ -93,8 +127,8 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
                 wattroff(gameWindow, COLOR_PAIR(1));
             }
             seed++;
-    }
         }
+    }
 
     //position cursor and refresh window
     wmove(gameWindow, cursorY, cursorX);
@@ -104,66 +138,226 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
     nodelay(gameWindow, TRUE);
     keypad(gameWindow, true);
 }
-{
-    switch (animal)
-        {
-        case 0:
-            wprintw(gameWindow, "     ___    ___\n");
-            wprintw(gameWindow, "    ( _<    >_ )\n");
-            wprintw(gameWindow, "    //        \\\\\n");
-            wprintw(gameWindow, "    \\\\___..___//\n");
-            wprintw(gameWindow, "     `-(    )-'\n");
-            wprintw(gameWindow, "       _|__|_\n");
-            wprintw(gameWindow, "      /_|__|_\\\n");
-            wprintw(gameWindow, "      /_|__|_\\\n");
-            wprintw(gameWindow, "      /_\\__/_\\\n");
-            wprintw(gameWindow, "       \\ || /  _\n");
-            wprintw(gameWindow, "         ||   ( )\n");
-            wprintw(gameWindow, "         \\\\___//\n");
-            wprintw(gameWindow, "          `---'\n");
-            wprintw(gameWindow, "\n\nYou just stood on a scorpion! - You've lost 2 health points!\n");
-            
-            
 
-            break;
-        case 1:
-            wprintw(gameWindow, " __         __\n");
-            wprintw(gameWindow, "/  \\.-***-./  \\\n");
-            wprintw(gameWindow, "\\    -   -    /\n");
-            wprintw(gameWindow, " |   o   o   |\n");
-            wprintw(gameWindow, " \\  .-'''-.  /\n");
-            wprintw(gameWindow, "  '-\\__Y__/-'\n");
-            wprintw(gameWindow, "     `---`\n");
-            wprintw(gameWindow, "\n\nYou're being mauled by a bear! - Fight it off!\n");
-        
-            break;
-        case 2:
-            wprintw(gameWindow, " /\\ \\  / /\\\n");
-            wprintw(gameWindow, "//\\\\ .. //\\\\\n");
-            wprintw(gameWindow, "//\\((  ))/\\\\\n");
-            wprintw(gameWindow, "/  < `' >  \\\n");
-            wprintw(gameWindow, "\n\nA spider is about to bite you - kill it!\n");
-            
-            break;
-        case 3:
-            wprintw(gameWindow, "        _\n");
-            wprintw(gameWindow, "       / \\      _-'\n");
-            wprintw(gameWindow, "     _/|  \\-''- _ /\n");
-            wprintw(gameWindow, "__-' { |          \\\\\n");
-            wprintw(gameWindow, "    /             \\\\\n");
-            wprintw(gameWindow, "    /       'o.  |o }\n");
-            wprintw(gameWindow, "    |            \\ ;\n");
-            wprintw(gameWindow, "                  ',\n");
-            wprintw(gameWindow, "       \\_         __\\\n");
-            wprintw(gameWindow, "         ''-_    \\.//\n");
-            wprintw(gameWindow, "           / '-____'\n");
-            wprintw(gameWindow, "          /\n");
-            wprintw(gameWindow, "        _'\n");
-            wprintw(gameWindow, "     _-'\n");
-            wprintw(gameWindow, "\n\nA pack of wolves is hunting you - escape quickly\n");
-            
-            break;
+int fight_handler(WINDOW *gameWindow, int animal)
+{
+    int health = 10;
+    char inputOption;
+
+    switch (animal)
+    {
+    case 0:
+        wprintw(gameWindow, "     ___    ___\n");
+        wprintw(gameWindow, "    ( _<    >_ )\n");
+        wprintw(gameWindow, "    //        \\\\\n");
+        wprintw(gameWindow, "    \\\\___..___//\n");
+        wprintw(gameWindow, "     `-(    )-'\n");
+        wprintw(gameWindow, "       _|__|_\n");
+        wprintw(gameWindow, "      /_|__|_\\\n");
+        wprintw(gameWindow, "      /_|__|_\\\n");
+        wprintw(gameWindow, "      /_\\__/_\\\n");
+        wprintw(gameWindow, "       \\ || /  _\n");
+        wprintw(gameWindow, "         ||   ( )\n");
+        wprintw(gameWindow, "         \\\\___//\n");
+        wprintw(gameWindow, "          `---'\n");
+        wprintw(gameWindow, "\n\nYou just stood on a scorpion! - You've lost 2 health points!\n");
+        wrefresh(gameWindow);
+        inventoryValues[0] -= 2;
+        sleep(5);
+        break;
+    case 1:
+        wprintw(gameWindow, " __         __\n");
+        wprintw(gameWindow, "/  \\.-***-./  \\\n");
+        wprintw(gameWindow, "\\    -   -    /\n");
+        wprintw(gameWindow, " |   o   o   |\n");
+        wprintw(gameWindow, " \\  .-'''-.  /\n");
+        wprintw(gameWindow, "  '-\\__Y__/-'\n");
+        wprintw(gameWindow, "     `---`\n");
+        wprintw(gameWindow, "\n\nYou're being mauled by a bear! - Fight it off!\n");
+        wrefresh(gameWindow);
+        mvwprintw(gameWindow, LINES*0.6, COLS*0.25, "What would you like to use?");
+        for (int i = 0; i < 3; i++)
+        {
+            mvwprintw(gameWindow, (LINES*0.6)-2, COLS*0.25, "Enemy health: %d", health);
+            mvwprintw(gameWindow, (LINES*0.6)+1, COLS*0.25, "F1) Sword: %d (Deals 6 damage)", inventoryValues[2]);
+            mvwprintw(gameWindow, (LINES*0.6)+2, COLS*0.25, "F2) Hands (+2 hunger) (Deals 3 damage)");
+            wrefresh(gameWindow);
+            for(int j = 0; j != 0;)
+            {
+                int input;
+                if((input = wgetch(gameWindow)) == ERR)
+                {
+                    //just loop again and see if we get an input in the buffer
+                }
+                else
+                {
+                    switch(input)
+                    {
+                        case KEY_F(1):
+                            inputOption = 'a';
+                            j++;
+                            break;
+                        case KEY_F(2):
+                            inputOption = 'b';
+                            j++;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            //legacy from when using wscanw
+            if (inputOption == 'a')
+            {
+                health -= 5;       
+                inventoryValues[2] -= 1;
+            }
+            else if (inputOption == 'b')
+            {
+                health -= 2;
+            }
+            if(health < 1)
+            {
+                werase(gameWindow);
+                wrefresh(gameWindow);
+                mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 2 stars!");
+                inventoryValues[3] += 3;
+                i=3;
+            }
+            sleep(1);
         }
+        break;
+    case 2:
+        wprintw(gameWindow, " /\\ \\  / /\\\n");
+        wprintw(gameWindow, "//\\\\ .. //\\\\\n");
+        wprintw(gameWindow, "//\\((  ))/\\\\\n");
+        wprintw(gameWindow, "/  < `' >  \\\n");
+        wprintw(gameWindow, "\n\nA spider is about to bite you - kill it!\n");
+        wrefresh(gameWindow);
+        mvwprintw(gameWindow, LINES*0.6, COLS*0.25, "What would you like to use?");
+        for (int i = 0; i < 3; i++)
+        {
+            mvwprintw(gameWindow, (LINES*0.6)-2, COLS*0.25, "Enemy health: %d", health);
+            mvwprintw(gameWindow, (LINES*0.6)+1, COLS*0.25, "F1) Sword: %d (Deals 10 damage)", inventoryValues[2]);
+            mvwprintw(gameWindow, (LINES*0.6)+2, COLS*0.25, "F2) Hands (+2 hunger) (Deals 7 damage)");
+            wrefresh(gameWindow);
+            for(int j = 0; j != 0;)
+            {
+                int input;
+                if((input = wgetch(gameWindow)) == ERR)
+                {
+                    //just loop again and see if we get an input in the buffer
+                }
+                else
+                {
+                    switch(input)
+                    {
+                        case KEY_F(1):
+                            inputOption = 'a';
+                            j++;
+                            break;
+                        case KEY_F(2):
+                            inputOption = 'b';
+                            j++;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            //legacy from when using wscanw
+            if (inputOption == 'a')
+            {
+                health -= 10;       
+                inventoryValues[2] -= 1;
+            }
+            else if (inputOption == 'b')
+            {
+                health -= 7;
+            }
+            if(health < 1)
+            {
+                werase(gameWindow);
+                wrefresh(gameWindow);
+                mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 1 star!");
+                inventoryValues[3] += 3;
+                i=3;
+            }
+            sleep(1);
+        }
+        break;
+    case 3:
+        wprintw(gameWindow, "        _\n");
+        wprintw(gameWindow, "       / \\      _-'\n");
+        wprintw(gameWindow, "     _/|  \\-''- _ /\n");
+        wprintw(gameWindow, "__-' { |          \\\\\n");
+        wprintw(gameWindow, "    /             \\\\\n");
+        wprintw(gameWindow, "    /       'o.  |o }\n");
+        wprintw(gameWindow, "    |            \\ ;\n");
+        wprintw(gameWindow, "                  ',\n");
+        wprintw(gameWindow, "       \\_         __\\\n");
+        wprintw(gameWindow, "         ''-_    \\.//\n");
+        wprintw(gameWindow, "           / '-____'\n");
+        wprintw(gameWindow, "          /\n");
+        wprintw(gameWindow, "        _'\n");
+        wprintw(gameWindow, "     _-'\n");
+        wprintw(gameWindow, "\n\nA pack of wolves is hunting you - escape quickly\n");
+        wrefresh(gameWindow);
+        mvwprintw(gameWindow, LINES*0.6, COLS*0.25, "What would you like to use?");
+        for (int i = 0; i < 3; i++)
+        {
+            mvwprintw(gameWindow, (LINES*0.6)-2, COLS*0.25, "Enemy health: %d", health);
+            mvwprintw(gameWindow, (LINES*0.6)+1, COLS*0.25, "F1) Sword: %d (Deals 5 damage)", inventoryValues[2]);
+            mvwprintw(gameWindow, (LINES*0.6)+2, COLS*0.25, "F2) Hands (+2 hunger) (Deals 2 damage)");
+            wrefresh(gameWindow);
+            for(int j = 0; j != 0;)
+            {
+                int input;
+                if((input = wgetch(gameWindow)) == ERR)
+                {
+                    //just loop again and see if we get an input in the buffer
+                }
+                else
+                {
+                    switch(input)
+                    {
+                        case KEY_F(1):
+                            inputOption = 'a';
+                            j++;
+                            break;
+                        case KEY_F(2):
+                            inputOption = 'b';
+                            j++;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            //legacy from when using wscanw
+            if (inputOption == 'a')
+            {
+                health -= 5;       
+                inventoryValues[2] -= 1;
+            }
+            else if (inputOption == 'b')
+            {
+                health -= 2;
+            }
+            if(health < 1)
+            {
+                werase(gameWindow);
+                wrefresh(gameWindow);
+                mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 3 stars!");
+                inventoryValues[3] += 3;
+                i=3;
+            }
+            sleep(1);
+        }
+        break;
+    }
+    sleep(5);
+    start_game_window(gameWindow, 10, 10);
     return 0; 
 }
 
@@ -173,6 +367,7 @@ int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
     if (worldItems[4] == 'X')
     {
         werase(gameWindow);
+        wrefresh(gameWindow);
         srand(time(NULL));
         int r = rand() % 4;
         fight_handler(gameWindow, r);
@@ -242,7 +437,6 @@ int open_settings()
     int j = 0;
     while(fgets(line, 100, fp) != NULL)
     {
-        //TODO: Clean up
         //parse the line - first word is option, second is value
         int i = 0;
         char tmpVal[2];
@@ -268,6 +462,10 @@ int open_settings()
 
 void *stats_handler(void *p)
 {
+    //allow us to stop the thread from another function
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS,NULL);
+
+    //start the ncurses window
     WINDOW *statsWindow;
     LOCK;
     statsWindow = create_newwin(LINES*0.2, COLS, LINES*0.8, 0);
@@ -326,6 +524,10 @@ void *stats_handler(void *p)
 
 void *game_handler(void *p)
 {
+    //allow us to stop the thread from another function
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS,NULL);
+
+    //start the ncurses window
     WINDOW *gameWindow;
     LOCK;
     gameWindow = create_newwin(LINES*0.8, COLS, 0, 0);
@@ -420,8 +622,6 @@ int main()
 
 
     //create window threads
-    pthread_t statsThread;
-    pthread_t gameThread;
     pthread_create(&statsThread, NULL, stats_handler, NULL);
     pthread_create(&gameThread, NULL, game_handler, NULL);
 

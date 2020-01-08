@@ -1,2 +1,4 @@
-Level : 3
-Difficulty : 5
+Start Game : 1
+Difficulty : 140
+Seed : 1000
+How-To : 

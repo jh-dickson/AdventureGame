@@ -2,18 +2,19 @@
 #include <ncurses.h>
 #include <menu.h>
 #include <stdlib.h>
-#include <time.h>
+#include <string.h>
 #include <unistd.h>
 
 /*This program is the 'launcher' for each of the levels, it generates a settings file and then runs the game.c file*/
 
+/*TODO: Calculate actual size of readme file
+        Add scroll support to readme view*/
+
 /*GLOBAL VARS*/
-char *levels[] = {"Level 1", "Level 2", "Level 3", "Level 4", "Settings", "Exit", (char *)NULL,};
-char *option[] = {"Level", "Difficulty", "Return to Main Menu", (char *)NULL,};
-char *value[] = {"1", "5", ""};
+char *option[] = {"Start Game", "Difficulty", "Seed", "How-To", "Exit", (char *)NULL,};
+char *value[] = {"", "140", "1000", ""};
 int selection;
-ITEM** levelItems;
-MENU* mainMenu;
+
 int numLevels;
 
 int write_settings()
@@ -36,44 +37,51 @@ int write_settings()
     return 0;
 }
 
-int show_settings_menu()
+int show_readme()
 {
-    ITEM** optionItems;
-    MENU* optionMenu;
+    //allocate enough space for the readme file
+    char *readme = malloc(1000000);
 
-    //clear up main menu
-    for(int i = 0; i < numLevels; ++i)
+    //load file like in write_settings, just with read perms
+    FILE *fp;
+
+    fp = fopen("readme.txt", "r");
+    char c;
+    int i=0;
+    //go through char by char and add to readme array
+    while ((c = fgetc(fp)) != EOF)
     {
-        free_item(levelItems[i]);
-    }  
-	free_menu(mainMenu);
-    endwin(); //<-this helps prevent the wrong menu items being displayed
-    refresh();
-    
-    //restart window
-    initscr();
-    cbreak();
-    noecho();
-    keypad(stdscr, true);
+        readme[i] = c;
+        i++;
+    }
+    fclose(fp);
 
-    //copied and pasted from main()
-    //clear screen and display new menu
-    //look at the options and see how many there are, then assign a menu item to each
-    int numOptions = sizeof(option) / sizeof(option[0]);
-    optionItems = (ITEM **)calloc(numOptions + 1, sizeof(ITEM *));
-    for(int i = 1; i < numOptions; ++i)
+    //TODO: allow the user to scroll the text
+    scrollok(stdscr, TRUE);
+    idlok(stdscr, TRUE);
+    printw("README:\n\n\n");
+    printw(readme);
+    refresh();
+    for(;;)
     {
-        optionItems[i] = new_item(option[i], value[i]);
-    }  
-	optionItems[numOptions] = (ITEM *)NULL;
-    //populate menu data then print
-    optionMenu = new_menu((ITEM **)optionItems);
-	post_menu(optionMenu);
-    refresh();
-
+        int input;
+        if((input = getch()) == ERR)
+        {
+            
+        }
+        else
+        {
+            switch(input)
+            {
+                case 10: 
+                    //TODO: Go back to main menu
+                    break;
+            }
+        }
+    }
 }
 
-int selection_handler(int selection)
+int selection_handler(int selection, MENU* mainMenu, ITEM** menuItems)
 {
     switch(selection)
     {
@@ -88,57 +96,48 @@ int selection_handler(int selection)
             write_settings();
             break;
 
-        case 2:
-            value[0] = "3";
-            write_settings();
-            break;
-        
         case 3:
-            value[0] = "4";
-            write_settings();
+            show_readme();
             break;
         
         case 4:
-            show_settings_menu();
-            break;
-
-        case 5:
             //make sure we deallocate memory before exiting
             for(int i = 0; i < numLevels; ++i)
             {
-                free_item(levelItems[i]);
+                free_item(menuItems[i]);
             }  
 	        free_menu(mainMenu);
 	        endwin();
             exit(0);
             break;
+            
     }
     return 0;
 }
 
 int main()
 {
+    ITEM** menuItems;
+    MENU* mainMenu;
+
     //initialise screen and capture keyboard input
     initscr();
     cbreak();
     noecho();
     keypad(stdscr, true);
 
-    //look at the levels and see how many options there are, then assign a menu item to each level
-    numLevels = sizeof(levels) / sizeof(levels[0]);
-    levelItems = (ITEM **)calloc(numLevels + 1, sizeof(ITEM *));
-    for(int i = 0; i < numLevels; ++i)
+    int numOptions = sizeof(option) / sizeof(option[0]);
+    menuItems = (ITEM **)calloc(numOptions + 1, sizeof(ITEM *));
+
+    for(int i = 0; i < numOptions; ++i)
     {
-        levelItems[i] = new_item(levels[i], levels[i]);
+        menuItems[i] = new_item(option[i], value[i]);
     }  
-	levelItems[numLevels] = (ITEM *)NULL;
-    
+	menuItems[numOptions] = (ITEM *)NULL;
     //populate menu data then print
-    mainMenu = new_menu((ITEM **)levelItems);
-    menu_opts_off(mainMenu, O_SHOWDESC); //<- workaround for duplicated columns - disables item descriptions
+    mainMenu = new_menu((ITEM **)menuItems);
 	post_menu(mainMenu);
     refresh();
-
     //capture keyboard input and assign to choice
     int choice;
     while((choice = getch()) != ERR)
@@ -154,14 +153,14 @@ int main()
             case 10:
                 //10 represents enter, so get current item and pass to selection handler
                 selection = item_index(current_item(mainMenu));
-                selection_handler(selection);
+                selection_handler(selection, mainMenu, menuItems);
 		}
 	}	
 
     //something's gone wrong to get here, so deallocate memory before exiting...
     for(int i = 0; i < numLevels; ++i)
     {
-        free_item(levelItems[i]);
+        free_item(menuItems[i]);
     }  
 	free_menu(mainMenu);
 	endwin();
