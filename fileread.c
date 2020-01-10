@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-int value[5];
+int difficulty;
+int seed;
 
 int main()
 {
+    //open the settings file and read each line
     FILE *fp;
     char line[100];
     fp = fopen("settings.txt", "r");
@@ -38,10 +40,20 @@ int main()
             i++;
         }
         
-        value[j] = atoi(tmpVal);
+        if (j == 1)
+        {
+            difficulty = atoi(tmpVal);
+        }
+        else if (j == 2)
+        {
+            seed = atoi(tmpVal);
+        }
+        //discard other values
+        
+         
         j++;
     }
-    printf("value[0]: %d\n", value[0]);
-    printf("value[1]: %d\n", value[1]);
     fclose(fp);
+    printf("Difficulty: %d\n", difficulty);
+    printf("Seed: %d\n", seed);
 }

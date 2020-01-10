@@ -1,4 +1,4 @@
-Start Game : 1
+Start Game : 2
 Difficulty : 140
-Seed : 1000
+Seed : 1234
 How-To : 

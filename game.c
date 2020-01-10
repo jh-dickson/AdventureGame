@@ -12,11 +12,10 @@
 I'm classing each window and/or view as a room... :)
 In case you were wondering, here's the list:
     1) Main menu
-    2) Settings menu
-    3) Readme
-    4) gameWindow
-    5) statsWindow
-    6) Fight view
+    2) Readme
+    3) gameWindow
+    4) statsWindow
+    5) Fight view
 
 FWIW here are the usable items:
     1) Swords, used in fights
@@ -25,7 +24,7 @@ FWIW here are the usable items:
     4) Hunger, decrements health if you're too hungry
 */
 
-/*TODO: Implement hunger
+/*TODO: Implement hunger related damage
         show stats from game on completion?
         check sword quantity at each fight stage
         clean up settings parser code
@@ -37,17 +36,18 @@ FWIW here are the usable items:
 */
 
 /*GLOBAL VARIABLES*/
-int value[5]; //<-used when loading the settings file - 0: Level, 1: Difficulty, 2: Seed
 char *inventoryItems[4] = {"Health", "Hunger", "Swords", "Stars"}; //<- lets stats keep track of different character traits
-int inventoryValues[4] = {5, 0, 0, 0};
+int inventoryValues[4] = {10, 0, 0, 0};
 int recentInput; 
 char charUnderCursor;
 int movements;
 int difficulty = 140;
+int seed = 1000;
 
 /*pthread definitions - this simplifies the locks and unlocks, see above stackoverflow link*/
 pthread_t statsThread;
 pthread_t gameThread;
+pthread_t checkThread;
 pthread_mutex_t MUTEX;
 #define LOCK pthread_mutex_lock(&MUTEX)
 #define UNLOCK pthread_mutex_unlock(&MUTEX)
@@ -61,12 +61,29 @@ WINDOW *create_newwin(int height, int width, int starty, int startx) {
     return local_win;
 }
 
-void death_handler()//<-ominous sounding...
+void *check_win_death(void *p)
 {
+    int returnVal;
+    int i = 1;
+    while (i == 1)
+    {
+        if (inventoryValues[0] < 1)
+        {
+            returnVal = 1; //<-death
+            i++;
+        }
+        else if (inventoryValues[3] > 4)
+        {
+            returnVal = 0;
+            i++;
+        }
+        sleep(1);        
+    }
+    
     //not a pretty way of killing the threads, ideally we would do it from within each thread...
     pthread_cancel(statsThread);
     pthread_cancel(gameThread);
-
+    return (void *)returnVal;
 }
 
 void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
@@ -74,7 +91,6 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
     char map[LINES][COLS];
 
     //generate world and print to game window
-    int seed = value[2];
     const char *charToAdd;
     start_color();
     //initialise colour settings for printing - assume the terminal has colour support... it probably does...
@@ -84,33 +100,34 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
     init_pair(5, COLOR_GREEN, COLOR_GREEN);//<- enemies - invisible
     init_pair(4, COLOR_WHITE, COLOR_RED); //<- boxes
     
+    srand(seed);
     for (int j = 1; j < COLS-1; j++)
     {
         for (int i = 1; i < (LINES*0.8)-1; i++)
         {
+            
             int nextCharType = rand() % 1000;
-            srand(seed);
             
             if (nextCharType <= 86)
             {
                 charToAdd = "T";
-                mvwprintw(gameWindow, i, j, charToAdd);
                 wattron(gameWindow, COLOR_PAIR(3)); //<- this has to be done inside the if statement as the charTypes have different colours
+                mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(3));
             }
             else if (nextCharType > 86 && nextCharType <= 120)
             {
                 charToAdd = "W";
-                mvwprintw(gameWindow, i, j, charToAdd);
                 wattron(gameWindow, COLOR_PAIR(2));
+                mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(2));
             }
             else if (nextCharType > 120 && nextCharType <= 121)
             {
                 charToAdd = "B";
                 wattron(gameWindow, COLOR_PAIR(4));
-                wattroff(gameWindow, COLOR_PAIR(4));
                 mvwprintw(gameWindow, i, j, charToAdd);
+                wattroff(gameWindow, COLOR_PAIR(4));
             }
             else if (nextCharType > 120 && nextCharType <= difficulty)
             {
@@ -126,7 +143,6 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(1));
             }
-            seed++;
         }
     }
 
@@ -182,7 +198,8 @@ int fight_handler(WINDOW *gameWindow, int animal)
             mvwprintw(gameWindow, (LINES*0.6)+1, COLS*0.25, "F1) Sword: %d (Deals 6 damage)", inventoryValues[2]);
             mvwprintw(gameWindow, (LINES*0.6)+2, COLS*0.25, "F2) Hands (+2 hunger) (Deals 3 damage)");
             wrefresh(gameWindow);
-            for(int j = 0; j != 0;)
+            int j = 0;
+            while(j == 0)
             {
                 int input;
                 if((input = wgetch(gameWindow)) == ERR)
@@ -209,19 +226,26 @@ int fight_handler(WINDOW *gameWindow, int animal)
             //legacy from when using wscanw
             if (inputOption == 'a')
             {
+                LOCK;
                 health -= 5;       
                 inventoryValues[2] -= 1;
+                UNLOCK;
             }
             else if (inputOption == 'b')
             {
+                LOCK;
                 health -= 2;
+                UNLOCK;
             }
             if(health < 1)
             {
                 werase(gameWindow);
                 wrefresh(gameWindow);
                 mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 2 stars!");
-                inventoryValues[3] += 3;
+                wrefresh(gameWindow);
+                LOCK;
+                inventoryValues[3] += 2;
+                UNLOCK;
                 i=3;
             }
             sleep(1);
@@ -241,7 +265,8 @@ int fight_handler(WINDOW *gameWindow, int animal)
             mvwprintw(gameWindow, (LINES*0.6)+1, COLS*0.25, "F1) Sword: %d (Deals 10 damage)", inventoryValues[2]);
             mvwprintw(gameWindow, (LINES*0.6)+2, COLS*0.25, "F2) Hands (+2 hunger) (Deals 7 damage)");
             wrefresh(gameWindow);
-            for(int j = 0; j != 0;)
+            int j = 0;
+            while(j == 0)
             {
                 int input;
                 if((input = wgetch(gameWindow)) == ERR)
@@ -268,19 +293,26 @@ int fight_handler(WINDOW *gameWindow, int animal)
             //legacy from when using wscanw
             if (inputOption == 'a')
             {
+                LOCK;
                 health -= 10;       
                 inventoryValues[2] -= 1;
+                UNLOCK;
             }
             else if (inputOption == 'b')
             {
+                LOCK;
                 health -= 7;
+                UNLOCK;
             }
             if(health < 1)
             {
                 werase(gameWindow);
                 wrefresh(gameWindow);
                 mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 1 star!");
-                inventoryValues[3] += 3;
+                wrefresh(gameWindow);
+                LOCK;
+                inventoryValues[3] += 1;
+                UNLOCK;
                 i=3;
             }
             sleep(1);
@@ -310,7 +342,8 @@ int fight_handler(WINDOW *gameWindow, int animal)
             mvwprintw(gameWindow, (LINES*0.6)+1, COLS*0.25, "F1) Sword: %d (Deals 5 damage)", inventoryValues[2]);
             mvwprintw(gameWindow, (LINES*0.6)+2, COLS*0.25, "F2) Hands (+2 hunger) (Deals 2 damage)");
             wrefresh(gameWindow);
-            for(int j = 0; j != 0;)
+            int j = 0;
+            while(j == 0)
             {
                 int input;
                 if((input = wgetch(gameWindow)) == ERR)
@@ -337,19 +370,26 @@ int fight_handler(WINDOW *gameWindow, int animal)
             //legacy from when using wscanw
             if (inputOption == 'a')
             {
+                LOCK;
                 health -= 5;       
                 inventoryValues[2] -= 1;
+                UNLOCK;
             }
             else if (inputOption == 'b')
             {
+                LOCK;
                 health -= 2;
+                UNLOCK;
             }
             if(health < 1)
             {
                 werase(gameWindow);
                 wrefresh(gameWindow);
                 mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 3 stars!");
+                wrefresh(gameWindow);
+                LOCK;
                 inventoryValues[3] += 3;
+                UNLOCK;
                 i=3;
             }
             sleep(1);
@@ -415,14 +455,12 @@ int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
             break;
     }
 
-
-
 }
 
 int open_settings()
 {
     //open the settings file and read each line
-      FILE *fp;
+    FILE *fp;
     char line[100];
     fp = fopen("settings.txt", "r");
     if (fp == NULL)
@@ -454,7 +492,17 @@ int open_settings()
             i++;
         }
         
-        value[j] = atoi(tmpVal);
+        if (j == 1)
+        {
+            difficulty = atoi(tmpVal);
+        }
+        else if (j == 2)
+        {
+            seed = atoi(tmpVal);
+        }
+        //discard other values
+        
+         
         j++;
     }
     fclose(fp);
@@ -478,46 +526,68 @@ void *stats_handler(void *p)
             //run the hunger stats: every 5 moves, the player hunger increases
             if (movements >= 5)
             {
-                inventoryValues[1]++;
                 LOCK;
+                inventoryValues[1]++;
                 movements =- 5;
                 UNLOCK;
             }
+
+            //TODO: deal damage if the player is above 8 hunger
+            /*if (inventoryValues[1] >= 8)
+            {
+                inventoryValues[0]--;
+            }*/
             
 
         }
         else
         {    
+            //legacy from when stats was handling multiple input types
             switch (recentInput)
             {
-            case KEY_BACKSPACE:
+            case 10:
                 if(charUnderCursor == 'B')
                 {
-                    inventoryValues[2]++;
-                    mvwprintw(statsWindow, 1, 1,"Picked up sword");
+                    int item = rand() % 2;
+                    if (item == 0)
+                    {
+                        LOCK;
+                        inventoryValues[2]++;
+                        UNLOCK;
+                        mvwprintw(statsWindow, 1, 1,"Picked up sword");
+                    }
+                    else
+                    {
+                        LOCK;
+                        inventoryValues[1] -= 3;
+                        UNLOCK;
+                        mvwprintw(statsWindow, 1, 1,"Picked up food ");
+                    }
+                    
+                    
                 }
                 else
                 {
-                    mvwprintw(statsWindow, 1, 1,"No item here!");
+                    mvwprintw(statsWindow, 1, 1,"No item here!  ");
                 }
                 LOCK;
                 recentInput = 0;
                 charUnderCursor = '\0';
                 UNLOCK;
                 break;
-            case 10:
-                mvwprintw(statsWindow, 2, 1,"No enemies here!");
-                LOCK;
-                recentInput = 0;
-                UNLOCK;
-                break;
             }
+            
+            //comfort sleep
+            nanosleep((const struct timespec[]){{0, 250000000L}}, NULL);
+
             //get inventory and print
             for (int i = 0; i < 4; i++)
             {
                 mvwprintw(statsWindow, (i+1), (COLS*0.5), "%s: %d", inventoryItems[i], inventoryValues[i]);
             }
-            wrefresh(statsWindow);        
+            LOCK;
+            wrefresh(statsWindow);
+            UNLOCK;        
         }
     }
 }
@@ -565,6 +635,9 @@ void *game_handler(void *p)
                     {
                         cursorY--;
                         wmove(gameWindow, cursorY, cursorX);
+                        LOCK;
+                        movements++;
+                        UNLOCK;
                     }
                     break;
                 case KEY_DOWN:
@@ -572,6 +645,9 @@ void *game_handler(void *p)
                     {
                         cursorY++;
                         wmove(gameWindow, cursorY, cursorX);
+                        LOCK;
+                        movements++;
+                        UNLOCK;
                     }
                     break;
                 case KEY_LEFT:
@@ -579,6 +655,9 @@ void *game_handler(void *p)
                     {
                         cursorX--;
                         wmove(gameWindow, cursorY, cursorX);
+                        LOCK;
+                        movements++;
+                        UNLOCK;
                     }
                     break;
                 case KEY_RIGHT:
@@ -586,14 +665,10 @@ void *game_handler(void *p)
                     {
                         cursorX++;
                         wmove(gameWindow, cursorY, cursorX);
+                        LOCK;
+                        movements++;
+                        UNLOCK;
                     }
-                    break;
-                case KEY_BACKSPACE:
-                    //offload to stats handler
-                    LOCK;
-                    recentInput = KEY_BACKSPACE;
-                    charUnderCursor = winch(gameWindow);
-                    UNLOCK;
                     break;
                 case 10:
                     //offload to stats handler
@@ -619,15 +694,28 @@ int main()
     initscr();
     cbreak();
     noecho();
-
-
+    
     //create window threads
     pthread_create(&statsThread, NULL, stats_handler, NULL);
     pthread_create(&gameThread, NULL, game_handler, NULL);
 
-    //wait for thread completion - this probably won't happen given the infinite loops...
+    //create win_death checker thread
+    pthread_create(&checkThread, NULL, check_win_death, NULL);
+
+    //wait for thread completion
+    void *endType;
     pthread_join(statsThread, NULL);
     pthread_join(gameThread, NULL);
+    pthread_join(checkThread, &endType);
+    
+    if (*((int *)endType) == 0)
+    {
+        printf("Congratulations, You won the game!\n");
+    }
+    else if (*((int *)endType) == 1)
+    {
+        printf("Oops, you died...\n");
+    }
 
     //cleanup windows
     endwin();
