@@ -16,6 +16,8 @@ char *value[] = {"", "140", "1000", ""};
 int selection;
 
 int numLevels;
+int show_readme();
+
 
 int write_settings()
 {
@@ -35,50 +37,6 @@ int write_settings()
     }
     fclose(fp);
     return 0;
-}
-
-int show_readme()
-{
-    //allocate enough space for the readme file
-    char *readme = malloc(1000000);
-
-    //load file like in write_settings, just with read perms
-    FILE *fp;
-
-    fp = fopen("readme.txt", "r");
-    char c;
-    int i=0;
-    //go through char by char and add to readme array
-    while ((c = fgetc(fp)) != EOF)
-    {
-        readme[i] = c;
-        i++;
-    }
-    fclose(fp);
-
-    //TODO: allow the user to scroll the text
-    scrollok(stdscr, TRUE);
-    idlok(stdscr, TRUE);
-    printw("README:\n\n\n");
-    printw(readme);
-    refresh();
-    for(;;)
-    {
-        int input;
-        if((input = getch()) == ERR)
-        {
-            
-        }
-        else
-        {
-            switch(input)
-            {
-                case 10: 
-                    //TODO: Go back to main menu
-                    break;
-            }
-        }
-    }
 }
 
 int selection_handler(int selection, MENU* mainMenu, ITEM** menuItems)
@@ -115,7 +73,7 @@ int selection_handler(int selection, MENU* mainMenu, ITEM** menuItems)
     return 0;
 }
 
-int main()
+void start_menu()
 {
     ITEM** menuItems;
     MENU* mainMenu;
@@ -125,6 +83,8 @@ int main()
     cbreak();
     noecho();
     keypad(stdscr, true);
+
+    erase();
 
     int numOptions = sizeof(option) / sizeof(option[0]);
     menuItems = (ITEM **)calloc(numOptions + 1, sizeof(ITEM *));
@@ -164,5 +124,54 @@ int main()
     }  
 	free_menu(mainMenu);
 	endwin();
-    return 0;
+}
+
+int show_readme()
+{
+    //allocate enough space for the readme file
+    char *readme = malloc(1000000);
+
+    //load file like in write_settings, just with read perms
+    FILE *fp;
+
+    fp = fopen("readme.txt", "r");
+    char c;
+    int i=0;
+    //go through char by char and add to readme array
+    while ((c = fgetc(fp)) != EOF)
+    {
+        readme[i] = c;
+        i++;
+    }
+    fclose(fp);
+
+    //TODO: allow the user to scroll the text
+    erase();
+    scrollok(stdscr, TRUE);
+    idlok(stdscr, TRUE);
+    printw("README:\n\n\n");
+    printw(readme);
+    refresh();
+    for(;;)
+    {
+        int input;
+        if((input = getch()) == ERR)
+        {
+            
+        }
+        else
+        {
+            switch(input)
+            {
+                case 10: 
+                    start_menu();
+                    break;
+            }
+        }
+    }
+}
+
+int main()
+{
+   start_menu();
 }
