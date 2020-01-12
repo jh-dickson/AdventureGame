@@ -17,6 +17,7 @@ int selection;
 
 int numLevels;
 int show_readme();
+void allocate_menu_items(ITEM ** menuItems, MENU* mainMenu);
 
 
 int write_settings()
@@ -43,15 +44,31 @@ int selection_handler(int selection, MENU* mainMenu, ITEM** menuItems)
 {
     switch(selection)
     {
-        //for the level selections, only edit the level value then write to txt
         case 0:
-            value[0] = "1";
             write_settings();
+            for(int i = 0; i < numLevels; ++i)
+            {
+                free_item(menuItems[i]);
+            }  
+	        free_menu(mainMenu);
+	        endwin();
+            exit(0);
             break;
-        
+
         case 1:
-            value[0] = "2";
-            write_settings();
+            /*if (*value[1] >= 130)
+            {
+                value[1] -= 5;
+            }
+            allocate_menu_items(menuItems, mainMenu);*/
+            break;
+
+        case 2:
+            /*if (*value[2] > 100)
+            {
+                value[2] -= 100;
+            }
+            allocate_menu_items(menuItems, mainMenu);*/
             break;
 
         case 3:
@@ -66,11 +83,30 @@ int selection_handler(int selection, MENU* mainMenu, ITEM** menuItems)
             }  
 	        free_menu(mainMenu);
 	        endwin();
-            exit(0);
+            exit(1);
             break;
-            
     }
     return 0;
+}
+
+void allocate_menu_items(ITEM ** menuItems, MENU* mainMenu)
+{
+
+    int numOptions = sizeof(option) / sizeof(option[0]);
+    menuItems = (ITEM **)calloc(numOptions + 1, sizeof(ITEM *));
+
+    //populate menu data
+    for(int i = 0; i < numOptions; ++i)
+    {
+        menuItems[i] = new_item(option[i], value[i]);
+    }  
+	menuItems[numOptions] = (ITEM *)NULL;
+    mainMenu = new_menu((ITEM **)menuItems);
+
+    //print the menu at the correct position in the terminal window
+    set_menu_sub(mainMenu, derwin(stdscr, 0, 0, 15, 31));
+	post_menu(mainMenu);
+    refresh();
 }
 
 void start_menu()
@@ -78,30 +114,41 @@ void start_menu()
     ITEM** menuItems;
     MENU* mainMenu;
 
+
     //initialise screen and capture keyboard input
     initscr();
     cbreak();
     noecho();
     keypad(stdscr, true);
-
     erase();
+
+    //ascii art "logo"
+    printw("  __\n");
+    printw(" /__  _  ._   _  ._ o  _    _.  _|     _  ._ _|_     ._ _     _   _. ._ _   _\n");
+    printw(" \\_| (/_ | | (/_ |  | (_   (_| (_| \\/ (/_ | | |_ |_| | (/_   (_| (_| | | | (/_\n ");
+    printw("                                                             _|\n");
 
     int numOptions = sizeof(option) / sizeof(option[0]);
     menuItems = (ITEM **)calloc(numOptions + 1, sizeof(ITEM *));
 
+    //populate menu data
     for(int i = 0; i < numOptions; ++i)
     {
         menuItems[i] = new_item(option[i], value[i]);
     }  
 	menuItems[numOptions] = (ITEM *)NULL;
-    //populate menu data then print
     mainMenu = new_menu((ITEM **)menuItems);
+
+    //print the menu at the correct position in the terminal window
+    set_menu_sub(mainMenu, derwin(stdscr, 0, 0, 15, 31));
 	post_menu(mainMenu);
     refresh();
+
     //capture keyboard input and assign to choice
     int choice;
     while((choice = getch()) != ERR)
 	{   
+        int currItem = item_index(current_item(mainMenu));
         switch(choice)
 	    {	
             case KEY_DOWN:
@@ -112,9 +159,10 @@ void start_menu()
 				break;
             case 10:
                 //10 represents enter, so get current item and pass to selection handler
-                selection = item_index(current_item(mainMenu));
-                selection_handler(selection, mainMenu, menuItems);
+                selection_handler(currItem, mainMenu, menuItems);
+                break;
 		}
+
 	}	
 
     //something's gone wrong to get here, so deallocate memory before exiting...
@@ -128,7 +176,7 @@ void start_menu()
 
 int show_readme()
 {
-    //allocate enough space for the readme file
+    //allocate (more than) enough space for the readme file
     char *readme = malloc(1000000);
 
     //load file like in write_settings, just with read perms
@@ -149,7 +197,7 @@ int show_readme()
     erase();
     scrollok(stdscr, TRUE);
     idlok(stdscr, TRUE);
-    printw("README:\n\n\n");
+    printw("README:\n\n");
     printw(readme);
     refresh();
     for(;;)

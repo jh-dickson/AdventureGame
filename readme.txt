@@ -6,7 +6,7 @@ There are varying types of creatures, and each will give you a different number 
 In order to help you fight them off, you may find swords in the boxes dotted around the map.
 Also in these boxes are items of food, which will decrease your hunger levels.
 
-If your hunger levels get too high, you will begin taking damage when you move. When your hunger is at zero, you will begin to heal.
+If your hunger levels get to 25, you will take damage whenever you move.
 
 The controls are simple, use the arrow keys to move around and the enter key to open a box.
 The enter key will also refresh your stats in the bottom window. Use this to make sure your hunger doesn't get too high.

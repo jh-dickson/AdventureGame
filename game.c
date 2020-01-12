@@ -8,9 +8,10 @@
 #include <unistd.h>
 #include <pthread.h> //<- technically speaking ncurses isn't really threadsafe but it works haha... see: https://stackoverflow.com/questions/29910562/why-has-no-one-written-a-threadsafe-branch-of-the-ncurses-library
 
-/*Begin rulebending: #define ROOM window
+/*
+Begin rulebending: #define ROOM window
 I'm classing each window and/or view as a room... :)
-In case you were wondering, here's the list:
+Here's the list:
     1) Main menu
     2) Readme
     3) gameWindow
@@ -22,11 +23,8 @@ FWIW here are the usable items:
     2) Health, again, used in fights
     3) Stars, gained in fights and allows the user to end the game
     4) Hunger, decrements health if you're too hungry
-*/
 
-/*TODO: Implement hunger related damage
-        show stats from game on completion?
-        check sword quantity at each fight stage
+TODO:   check sword quantity at each fight stage
         clean up settings parser code
         clean up key input handling in fight mode (or room should i say...)
         yield thread on getch error?
@@ -61,7 +59,7 @@ WINDOW *create_newwin(int height, int width, int starty, int startx) {
     return local_win;
 }
 
-void *check_win_death(void *p)
+void *check_win_death(void *result)
 {
     int returnVal;
     int i = 1;
@@ -69,21 +67,34 @@ void *check_win_death(void *p)
     {
         if (inventoryValues[0] < 1)
         {
-            returnVal = 1; //<-death
+            returnVal = 0; //<-death
             i++;
         }
         else if (inventoryValues[3] > 4)
         {
-            returnVal = 0; //<-win
+            returnVal = 1; //<-win
             i++;
         }
+        //keep cpu time down
         sleep(1);        
     }
     
     //not a pretty way of killing the threads, ideally we would do it from within each thread...
     pthread_cancel(statsThread);
     pthread_cancel(gameThread);
-    return (void *)returnVal;
+
+    //return integer to main thread: https://stackoverflow.com/questions/2251452/how-to-return-a-value-from-pthread-threads-in-c
+    if (returnVal != 0)
+    {
+        *((int *)result) = returnVal;
+        pthread_exit(result);
+    }
+    else
+    {
+        pthread_exit(0);
+    }
+    
+    
 }
 
 void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
@@ -97,7 +108,7 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
     init_pair(2, COLOR_BLUE, COLOR_CYAN); //<- water
     init_pair(3, COLOR_BLACK, COLOR_GREEN); //<- trees
     init_pair(1, COLOR_YELLOW, COLOR_GREEN); //<- grass (green background and yellow characters)
-    init_pair(5, COLOR_GREEN, COLOR_GREEN);//<- enemies - invisible
+    init_pair(5, COLOR_GREEN, COLOR_GREEN);//<- enemies - invisible (unused), would be enabled in the actual game, but for ease of marking it's not used...
     init_pair(4, COLOR_WHITE, COLOR_RED); //<- boxes
     
     srand(seed);
@@ -122,17 +133,17 @@ void start_game_window(WINDOW *gameWindow, int cursorX, int cursorY)
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(2));
             }
-            else if (nextCharType > 120 && nextCharType <= 121)
+            else if (nextCharType > 120 && nextCharType <= 125)
             {
                 charToAdd = "B";
                 wattron(gameWindow, COLOR_PAIR(4));
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(4));
             }
-            else if (nextCharType > 120 && nextCharType <= difficulty)
+            else if (nextCharType > 125 && nextCharType <= difficulty)
             {
                 charToAdd = "X";//X marks the spot
-                wattron(gameWindow, COLOR_PAIR(3));//<-enemies underneath the user are invisible but we can pick them up in code later on
+                wattron(gameWindow, COLOR_PAIR(3));//<-enemies underneath the user are should be invisible but it would be harder to test the functionality.
                 mvwprintw(gameWindow, i, j, charToAdd);
                 wattroff(gameWindow, COLOR_PAIR(3));
             }
@@ -179,7 +190,7 @@ int fight_handler(WINDOW *gameWindow, int animal)
         wprintw(gameWindow, "\n\nYou just stood on a scorpion! - You've lost 2 health points!\n");
         wrefresh(gameWindow);
         inventoryValues[0] -= 2;
-        sleep(5);
+        sleep(1);
         break;
     case 1:
         wprintw(gameWindow, " __         __\n");
@@ -241,7 +252,7 @@ int fight_handler(WINDOW *gameWindow, int animal)
             {
                 werase(gameWindow);
                 wrefresh(gameWindow);
-                mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 2 stars!");
+                mvwprintw(gameWindow, (LINES*0.4), COLS*0.4, "You won, gained 2 stars!");
                 wrefresh(gameWindow);
                 LOCK;
                 inventoryValues[3] += 2;
@@ -308,7 +319,7 @@ int fight_handler(WINDOW *gameWindow, int animal)
             {
                 werase(gameWindow);
                 wrefresh(gameWindow);
-                mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 1 star!");
+                mvwprintw(gameWindow, (LINES*0.4), COLS*0.4, "You won, gained 1 star!");
                 wrefresh(gameWindow);
                 LOCK;
                 inventoryValues[3] += 1;
@@ -385,7 +396,7 @@ int fight_handler(WINDOW *gameWindow, int animal)
             {
                 werase(gameWindow);
                 wrefresh(gameWindow);
-                mvwprintw(gameWindow, (LINES*0.4), COLS*0.5, "You won, gained 3 stars!");
+                mvwprintw(gameWindow, (LINES*0.4), COLS*0.4, "You won, gained 3 stars!");
                 wrefresh(gameWindow);
                 LOCK;
                 inventoryValues[3] += 3;
@@ -412,6 +423,27 @@ int can_move(int diffX, int diffY, char worldItems[5], WINDOW *gameWindow)
         int r = rand() % 4;
         fight_handler(gameWindow, r);
     }
+
+    //hunger related damage
+    if (inventoryValues[1] >= 25)
+    {
+        //cap hunger at 10
+        inventoryValues[1] = 25;
+        inventoryValues[0]--;        
+    }
+
+    //while we're at it, sanity check the health value :)
+    if (inventoryValues[0] >= 10)
+    {
+        inventoryValues[0] = 10;
+    }
+    else if (inventoryValues[0] < 0)
+    {
+        inventoryValues[0] = 0;
+    }
+    
+    
+    
 
     //diffX is the change in X, same idea with diffY
     //worldItems array is the set of items 0:up 1:down 2:left 3:right 4:underneath the moving object
@@ -700,24 +732,24 @@ int main()
     pthread_create(&gameThread, NULL, game_handler, NULL);
 
     //create win_death checker thread
-    pthread_create(&checkThread, NULL, check_win_death, NULL);
+    int result;
+    pthread_create(&checkThread, NULL, check_win_death, &result);
 
     //wait for thread completion
-    void *endType;
+    void *endType = 0;
     pthread_join(statsThread, NULL);
     pthread_join(gameThread, NULL);
     pthread_join(checkThread, &endType);
+    endwin();
     
-    if (*((int *)endType) == 0)
+    if (endType != 0)
     {
         printf("Congratulations, You won the game!\n");
     }
-    else if (*((int *)endType) == 1)
+    else
     {
         printf("Oops, you died...\n");
     }
 
-    //cleanup windows
-    endwin();
     return(0);
 }
