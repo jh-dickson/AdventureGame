@@ -74,7 +74,7 @@ void *check_win_death(void *p)
         }
         else if (inventoryValues[3] > 4)
         {
-            returnVal = 0;
+            returnVal = 0; //<-win
             i++;
         }
         sleep(1);        
